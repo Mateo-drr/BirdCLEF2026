@@ -1,0 +1,10 @@
+
+torch
+torchvision
+torchaudio
+torchcodec
+numpy
+tqdm
+spyder-kernels==3.1.*
+matplotlib
+pandas
