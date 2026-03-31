@@ -6,6 +6,7 @@ Run from competition root or a Kaggle notebook.
 
 import random
 from pathlib import Path
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -56,6 +57,92 @@ if SS_LABELS.exists():
     show_df("train_soundscapes_labels.csv", ssl)
 else:
     print("\ntrain_soundscapes_labels.csv not found – skipping")
+    
+unique_anim_ids_train = set(train["primary_label"])
+unique_anim_ids_ssl = []
+for labels in ssl["primary_label"]:
+    result = [x.strip() for x in labels.split(';')]
+    unique_anim_ids_ssl += result
+unique_anim_ids_ssl = set(unique_anim_ids_ssl)
+    
+# one file can have many labels for the same window
+clean = {}
+for _, row in ssl.iterrows():
+    key = (row["filename"], row["start"], row["end"])
+    # get the labels in that row
+    labels = [l.strip() for l in row["primary_label"].split(";")]
+    if key not in clean:
+        clean[key] = set()
+    clean[key].update(labels) # add any missing labels to the file window set
+# convert to dataframe
+rows = []
+for (filename, start, end), labels in clean.items():
+    rows.append({
+        "filename": filename,
+        "start": start,
+        "end": end,
+        "label_list": sorted(labels)
+    })
+
+sc_clean = pd.DataFrame(rows)
+print(sc_clean.shape)
+print(sc_clean.iloc[0])
+
+all_labels = []
+for lbls in sc_clean["label_list"]:
+    all_labels += lbls
+
+counts = Counter(all_labels)
+labels, freqs = zip(*sorted(counts.items(), key=lambda x: x[1], reverse=True))
+plt.figure(figsize=(14, 5))
+plt.bar(labels, freqs, edgecolor='black')
+plt.xticks(rotation=90)
+plt.xlabel("Label")
+plt.ylabel("Number of windows")
+plt.title("Label Frequencies")
+plt.tight_layout()
+plt.show()
+
+
+# flatten sc_clean labels into one row per label
+sc_rows = []
+for _, row in sc_clean.iterrows():
+    for lbl in row["label_list"]:
+        sc_rows.append({"primary_label": lbl, "source": "soundscape"})
+
+# train.csv already has one label per row
+train_rows = [{"primary_label": lbl, "source": "train_audio"}
+              for lbl in train["primary_label"]]
+
+combined = pd.DataFrame(sc_rows + train_rows)
+print(combined.shape)
+print(combined["source"].value_counts())
+
+# count per label per source
+counts = combined.groupby(["primary_label", "source"]).size().unstack(fill_value=0)
+counts["total"] = counts.sum(axis=1)
+counts = counts.sort_values("total", ascending=False)
+
+# plot stacked bar
+fig, ax = plt.subplots(figsize=(18, 5))
+counts[["train_audio", "soundscape"]].plot(kind="bar", stacked=True, ax=ax, edgecolor="black")
+ax.set_xlabel("Label")
+ax.set_ylabel("Count")
+ax.set_title("Label Frequencies — train_audio vs soundscape")
+ax.tick_params(axis="x", rotation=90, labelsize=7)
+plt.tight_layout()
+plt.show()
+
+# summary table
+print("\nTop 10 by total count:")
+print(counts.head(10))
+print("\nLabels only in train_audio (not in soundscapes):")
+only_train = counts[counts["soundscape"] == 0].index.tolist()
+print(len(only_train), only_train[:10])
+print("\nLabels only in soundscapes (not in train_audio):")
+only_sc = counts[counts["train_audio"] == 0].index.tolist()
+print(len(only_sc), only_sc[:10])
+
 
 # ── 2. train.csv summaries ─────────────────────────────────────────────────────
 print("\n" + "=" * 70)

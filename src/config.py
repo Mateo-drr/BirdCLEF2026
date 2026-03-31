@@ -27,7 +27,8 @@ class Config:
     project_name: str = "Sample"
 
     # others
-    basePath: Path = cwd
+    basePath: Path = cwd.parent
+    dsPath: Path = cwd.parent / "dataset"
     modelDir: Path = cwd / "weights"
 
 config = Config()
